@@ -1,0 +1,30 @@
+[package]
+name = "converter"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "A CosmWasm contract for converting between different token standards."
+repository = "https://github.com/manifest-network/manifest-contracts"
+homepage = "https://manifest.network"
+keywords = ["blockchain", "web3", "cosmwasm", "manifest"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bech32 = "0.11.0"
+const_format = "0.2"
+prost = "0.14.1"
+cosmwasm-std = { version = "3", features = ["cosmwasm_2_2"] }
+cosmwasm-schema = "3"
+cw-utils = "3"
+serde = { version = "1", features = ["derive"] }
+cw-storage-plus = "3"
+manifest-std = "0.1.0"
+thiserror = "2"
+
+[dev-dependencies]
+cw-multi-test = { version = "3", features = ["cosmwasm_2_2"] }
+
+[features]
+library = []
