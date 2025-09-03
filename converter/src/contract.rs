@@ -23,10 +23,6 @@ pub fn instantiate(
     // Rate is validated in its constructor
     // Denoms are validated in their constructors
 
-    if msg.source_denom == msg.target_denom {
-        return Err(ContractError::ConfigError(SameDenom));
-    }
-
     let config = Config {
         poa_admin: deps.api.addr_validate(msg.poa_admin.as_str())?,
         rate: crate::rate::Rate::parse(&msg.rate)?,
@@ -34,6 +30,8 @@ pub fn instantiate(
         target_denom: crate::denom::Denom::new(msg.target_denom)?,
         paused: msg.paused,
     };
+
+    config.validate()?;
 
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
@@ -89,12 +87,11 @@ pub fn migrate(
 
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    Ok(Response::new().add_attributes([
-        ("action", "migrate"),
-        ("contract", CONTRACT_NAME),
-        ("from_version", stored.version.as_str()),
-        ("to_version", CONTRACT_VERSION),
-    ]))
+    Ok(Response::new()
+        .add_attribute("action", "migrate")
+        .add_attribute("contract", CONTRACT_NAME)
+        .add_attribute("from_version", stored.version)
+        .add_attribute("to_version", CONTRACT_VERSION))
 }
 
 mod helper {
@@ -123,12 +120,11 @@ mod query {
 mod exec {
     use super::*;
     use crate::denom::Denom;
-    use crate::error::AmountError::AmountIsZero;
-    use crate::error::AuthError::NotAdmin;
+    use crate::error::AdminError::{CannotRenounce, NotAdmin};
     use crate::error::ConvertError::{InvalidFunds, InvalidSourceDenom};
     use crate::msg::UpdateConfig;
     use crate::rate::Rate;
-    use cosmwasm_std::{AnyMsg, BankMsg, CosmosMsg, StdError};
+    use cosmwasm_std::{AnyMsg, BankMsg, CosmosMsg};
     use cw_utils::one_coin;
     use manifest_std::cosmos::authz::v1beta1::MsgExec;
     use manifest_std::google::protobuf::Any;
@@ -142,18 +138,21 @@ mod exec {
         admin: Option<String>,
     ) -> Result<Response, ContractError> {
         nonpayable(&info).map_err(|_| ContractError::AmountError(NonPayable))?;
-        let new = match &admin {
-            Some(a) => Some(deps.api.addr_validate(a)?),
-            None => None,
-        };
+        ADMIN
+            .assert_admin(deps.as_ref(), &info.sender)
+            .map_err(|_| ContractError::AdminError(NotAdmin))?;
+
+        let admin_str = admin.ok_or(ContractError::AdminError(CannotRenounce))?;
+        let new = deps.api.addr_validate(&admin_str)?;
+
         let res = ADMIN
-            .execute_update_admin(deps, info, new)
-            .map_err(|e| ContractError::StdError(StdError::from(e)))?;
+            .execute_update_admin(deps, info, Some(new))
+            .map_err(|_| ContractError::AdminError(NotAdmin))?;
         Ok(res
             .add_attribute("action", "update_admin")
             .add_attribute("contract", CONTRACT_NAME)
             .add_attribute("version", CONTRACT_VERSION)
-            .add_attribute("new_admin", admin.as_deref().unwrap_or("none")))
+            .add_attribute("new_admin", admin_str))
     }
 
     // Update the contract configuration with new values
@@ -165,7 +164,7 @@ mod exec {
         nonpayable(&info).map_err(|_| ContractError::AmountError(NonPayable))?;
         ADMIN
             .assert_admin(deps.as_ref(), &info.sender)
-            .map_err(|_| ContractError::Unauthorized(NotAdmin))?;
+            .map_err(|_| ContractError::AdminError(NotAdmin))?;
 
         if config.is_empty() {
             return Ok(Response::new()
@@ -208,16 +207,15 @@ mod exec {
 
         CONFIG.save(deps.storage, &current_config)?;
 
-        Ok(Response::new().add_attributes([
-            ("action", "update_config"),
-            ("contract", CONTRACT_NAME),
-            ("version", CONTRACT_VERSION),
-            ("poa_admin", current_config.poa_admin.as_str()),
-            ("rate", current_config.rate.to_string().as_str()),
-            ("source_denom", current_config.source_denom.as_str()),
-            ("target_denom", current_config.target_denom.as_str()),
-            ("paused", current_config.paused.to_string().as_str()),
-        ]))
+        Ok(Response::new()
+            .add_attribute("action", "update_config")
+            .add_attribute("contract", CONTRACT_NAME)
+            .add_attribute("version", CONTRACT_VERSION)
+            .add_attribute("poa_admin", current_config.poa_admin)
+            .add_attribute("rate", current_config.rate.to_string())
+            .add_attribute("source_denom", current_config.source_denom.to_string())
+            .add_attribute("target_denom", current_config.target_denom.to_string())
+            .add_attribute("paused", current_config.paused.to_string()))
     }
 
     // Convert source tokens to target tokens
@@ -241,10 +239,6 @@ mod exec {
         // The coin should be of the source_denom type
         if coin.denom != config.source_denom.to_string() {
             return Err(ContractError::ConvertError(InvalidSourceDenom));
-        }
-
-        if coin.amount.is_zero() {
-            return Err(ContractError::AmountError(AmountIsZero));
         }
 
         // Calculate amount to mint based on rate
@@ -288,27 +282,25 @@ mod exec {
 
         let msg = CosmosMsg::Any(AnyMsg {
             type_url: MsgExec::TYPE_URL.to_string(),
-            value: Binary::from(exec.encode_to_vec()),
+            value: exec.encode_to_vec().into(),
         });
 
         Ok(Response::new()
             .add_message(send)
             .add_message(msg)
-            .add_attributes([
-                ("action", "convert"),
-                ("contract", CONTRACT_NAME),
-                ("version", CONTRACT_VERSION),
-                ("sender", info.sender.as_str()),
-                ("poa_admin", config.poa_admin.as_str()),
-                ("burned", coin.amount.to_string().as_str()),
-                ("minted", amt_to_mint.to_string().as_str()),
-                ("burned_denom", config.source_denom.as_str()),
-                ("minted_denom", config.target_denom.as_str()),
-                ("authz_grantee", env.contract.address.as_str()),
-                ("authz_msg_count", "2"),
-                ("burn_type", MsgBurnHeldBalance::TYPE_URL),
-                ("mint_type", MsgMint::TYPE_URL),
-            ]))
+            .add_attribute("action", "convert")
+            .add_attribute("contract", CONTRACT_NAME)
+            .add_attribute("version", CONTRACT_VERSION)
+            .add_attribute("sender", info.sender)
+            .add_attribute("poa_admin", config.poa_admin)
+            .add_attribute("burned", coin.amount.to_string())
+            .add_attribute("minted", amt_to_mint.to_string())
+            .add_attribute("burned_denom", config.source_denom)
+            .add_attribute("minted_denom", config.target_denom)
+            .add_attribute("authz_grantee", env.contract.address)
+            .add_attribute("authz_msg_count", "2")
+            .add_attribute("burn_type", MsgBurnHeldBalance::TYPE_URL)
+            .add_attribute("mint_type", MsgMint::TYPE_URL))
     }
 }
 
@@ -322,6 +314,7 @@ mod tests {
     use crate::state::Config;
     use cosmwasm_std::testing::MockApi;
     use cosmwasm_std::{Addr, Coin, CustomMsg, Empty};
+    use cw_controllers::AdminResponse;
     use cw_multi_test::{App, AppBuilder, Contract, ContractWrapper, Executor, StargateAccepting};
 
     pub fn contract() -> Box<dyn Contract<Empty>> {
@@ -336,14 +329,11 @@ mod tests {
         (app, code_id)
     }
 
-    fn setup_app_with_funds(sender: &Addr, coin: Coin) -> (App, u64) {
+    fn setup_app_with_funds(sender: &Addr, coins: Vec<Coin>) -> (App, u64) {
         let mut app = AppBuilder::default()
             .with_api(MockApi::default().with_prefix(BECH32_PREFIX))
             .build(|router, _, storage| {
-                router
-                    .bank
-                    .init_balance(storage, sender, vec![coin.clone()])
-                    .unwrap();
+                router.bank.init_balance(storage, sender, coins).unwrap();
             });
         let code_id = app.store_code(contract());
         (app, code_id)
@@ -651,7 +641,7 @@ mod tests {
             amount: cosmwasm_std::Uint256::new(100),
         };
 
-        let (mut app, code_id) = setup_app_with_funds(&admin, coin.clone());
+        let (mut app, code_id) = setup_app_with_funds(&admin, vec![coin]);
         let config = Config::try_with_defaults(Rate::parse("42")?)?;
         let addr = instantiate_contract(&mut app, code_id, admin.clone(), config.clone())?;
 
@@ -689,6 +679,35 @@ mod tests {
     }
 
     #[test]
+    fn convert_amount_is_zero() -> Result<(), ContractError> {
+        let sender = MockApi::default()
+            .with_prefix(BECH32_PREFIX)
+            .addr_make("sender");
+        let coin = Coin {
+            denom: "umfx".to_string(),
+            amount: cosmwasm_std::Uint256::new(100),
+        };
+
+        let (mut app, code_id) = setup_app_with_funds(&sender, vec![coin]);
+        let admin = app.api().addr_make("admin");
+        let config = Config::try_with_defaults(Rate::parse("42")?)?;
+        let addr = instantiate_contract(&mut app, code_id, admin, config.clone())?;
+
+        let convert_msg = ExecuteMsg::Convert {};
+        let funds = vec![Coin {
+            denom: "umfx".to_string(),
+            amount: cosmwasm_std::Uint256::new(0),
+        }];
+        let err = app
+            .execute_contract(sender, addr.clone(), &convert_msg, &funds)
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Cannot transfer empty coins amount"));
+        Ok(())
+    }
+
+    #[test]
     fn convert_invalid_source_denom() -> Result<(), ContractError> {
         let sender = Addr::unchecked("sender");
         let coin = Coin {
@@ -696,7 +715,7 @@ mod tests {
             amount: cosmwasm_std::Uint256::new(100),
         };
 
-        let (mut app, code_id) = setup_app_with_funds(&sender, coin.clone());
+        let (mut app, code_id) = setup_app_with_funds(&sender, vec![coin]);
         let admin = app.api().addr_make("admin");
         let config = Config::try_with_defaults(Rate::parse("42")?)?;
         let addr = instantiate_contract(&mut app, code_id, admin, config.clone())?;
@@ -714,6 +733,43 @@ mod tests {
     }
 
     #[test]
+    fn convert_invalid_multi_coin() -> Result<(), ContractError> {
+        let sender = Addr::unchecked("sender");
+        let coins = vec![
+            Coin {
+                denom: "umfx".to_string(),
+                amount: cosmwasm_std::Uint256::new(100),
+            },
+            Coin {
+                denom: "uatom".to_string(),
+                amount: cosmwasm_std::Uint256::new(100),
+            },
+        ];
+
+        let (mut app, code_id) = setup_app_with_funds(&sender, coins);
+        let admin = app.api().addr_make("admin");
+        let config = Config::try_with_defaults(Rate::parse("42")?)?;
+        let addr = instantiate_contract(&mut app, code_id, admin, config.clone())?;
+
+        let convert_msg = ExecuteMsg::Convert {};
+        let funds = vec![
+            Coin {
+                denom: "umfx".to_string(),
+                amount: cosmwasm_std::Uint256::new(50),
+            },
+            Coin {
+                denom: "uatom".to_string(),
+                amount: cosmwasm_std::Uint256::new(50),
+            },
+        ];
+        let err = app
+            .execute_contract(sender, addr.clone(), &convert_msg, &funds)
+            .unwrap_err();
+        assert!(err.to_string().contains("invalid funds sent"));
+        Ok(())
+    }
+
+    #[test]
     fn paused() -> Result<(), ContractError> {
         let sender = Addr::unchecked("sender");
         let coin = Coin {
@@ -721,7 +777,7 @@ mod tests {
             amount: cosmwasm_std::Uint256::new(100),
         };
 
-        let (mut app, code_id) = setup_app_with_funds(&sender, coin.clone());
+        let (mut app, code_id) = setup_app_with_funds(&sender, vec![coin]);
         let admin = app.api().addr_make("admin");
         let mut config = Config::try_with_defaults(Rate::parse("42")?)?;
         config.paused = true;
@@ -785,6 +841,62 @@ mod tests {
         // Try converting again
         let res = app.execute_contract(sender.clone(), addr.clone(), &convert_msg, &funds);
         assert!(res.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn update_admin() -> Result<(), ContractError> {
+        let (mut app, code_id) = setup_default_app();
+        let admin = app.api().addr_make("admin");
+        let config = Config::try_with_defaults(Rate::parse("42")?)?;
+        let addr = instantiate_contract(&mut app, code_id, admin.clone(), config.clone())?;
+
+        let new_admin = app.api().addr_make("new_admin");
+        let update_msg = ExecuteMsg::UpdateAdmin {
+            admin: Some(new_admin.to_string()),
+        };
+        let res = app.execute_contract(admin.clone(), addr.clone(), &update_msg, &[]);
+        assert!(res.is_ok());
+
+        let resp: AdminResponse = app.wrap().query_wasm_smart(&addr, &QueryMsg::Admin {})?;
+        assert_eq!(resp.admin.unwrap(), new_admin.to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn update_admin_unauthorized() -> Result<(), ContractError> {
+        let (mut app, code_id) = setup_default_app();
+        let admin = app.api().addr_make("admin");
+        let config = Config::try_with_defaults(Rate::parse("42")?)?;
+        let addr = instantiate_contract(&mut app, code_id, admin.clone(), config.clone())?;
+
+        let unauthorized = app.api().addr_make("unauthorized");
+        let new_admin = app.api().addr_make("new_admin");
+        let update_msg = ExecuteMsg::UpdateAdmin {
+            admin: Some(new_admin.to_string()),
+        };
+        let res = app.execute_contract(unauthorized.clone(), addr.clone(), &update_msg, &[]);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.to_string().contains("unauthorized"));
+        assert!(err
+            .to_string()
+            .contains("only admin can perform this action"));
+        Ok(())
+    }
+
+    #[test]
+    fn update_admin_reject_renounce() -> Result<(), ContractError> {
+        let (mut app, code_id) = setup_default_app();
+        let admin = app.api().addr_make("admin");
+        let config = Config::try_with_defaults(Rate::parse("42")?)?;
+        let addr = instantiate_contract(&mut app, code_id, admin.clone(), config.clone())?;
+
+        let update_msg = ExecuteMsg::UpdateAdmin { admin: None };
+        let res = app.execute_contract(admin, addr.clone(), &update_msg, &[]);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(err.to_string().contains("cannot renounce admin role"));
         Ok(())
     }
 }

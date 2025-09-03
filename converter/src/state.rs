@@ -44,4 +44,11 @@ impl Config {
             paused: false,
         })
     }
+
+    pub fn validate(&self) -> Result<(), ContractError> {
+        if self.source_denom == self.target_denom {
+            return Err(ContractError::ConfigError(SameDenom));
+        }
+        Ok(())
+    }
 }

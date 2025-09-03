@@ -6,7 +6,7 @@ pub enum ContractError {
     #[error("{0}")]
     StdError(#[from] StdError),
     #[error("unauthorized: {0}")]
-    Unauthorized(#[from] AuthError),
+    AdminError(#[from] AdminError),
     #[error("invalid rate: {0}")]
     RateError(#[from] RateError),
     #[error("invalid denom: {0}")]
@@ -68,9 +68,11 @@ pub enum DenomError {
 }
 
 #[derive(Error, Debug)]
-pub enum AuthError {
+pub enum AdminError {
     #[error("only admin can perform this action")]
     NotAdmin,
+    #[error("cannot renounce admin role")]
+    CannotRenounce,
 }
 
 #[derive(Error, Debug)]
