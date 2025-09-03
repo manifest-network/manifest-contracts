@@ -25,7 +25,7 @@ pub struct Config {
     // If non-optional fields are added, config must be versioned and the migration handler must be updated
 }
 
-// Never rename this key the storage keys
+// Never rename the storage keys
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const ADMIN: Admin = Admin::new("admin");
 

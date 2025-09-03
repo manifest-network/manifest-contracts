@@ -468,7 +468,6 @@ mod tests {
         let res = app.execute_contract(unauthorized.clone(), addr.clone(), &update_msg, &[]);
         assert!(res.is_err());
         let err = res.unwrap_err();
-        dbg!(&err);
         assert!(err.to_string().contains("unauthorized"));
         assert!(err
             .to_string()
@@ -639,6 +638,37 @@ mod tests {
                 .value,
             "identical config, no changes made"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn update_config_reject_funds() -> Result<(), ContractError> {
+        let admin = MockApi::default()
+            .with_prefix(BECH32_PREFIX)
+            .addr_make("admin");
+        let coin = Coin {
+            denom: "umfx".to_string(),
+            amount: cosmwasm_std::Uint256::new(100),
+        };
+
+        let (mut app, code_id) = setup_app_with_funds(&admin, coin.clone());
+        let config = Config::try_with_defaults(Rate::parse("42")?)?;
+        let addr = instantiate_contract(&mut app, code_id, admin.clone(), config.clone())?;
+
+        let update_msg = ExecuteMsg::UpdateConfig {
+            config: UpdateConfig {
+                paused: Some(false),
+                ..Default::default()
+            },
+        };
+        let funds = vec![Coin {
+            denom: "umfx".to_string(),
+            amount: cosmwasm_std::Uint256::new(100),
+        }];
+        let err = app
+            .execute_contract(admin, addr.clone(), &update_msg, &funds)
+            .unwrap_err();
+        assert!(err.to_string().contains("non-payable"));
         Ok(())
     }
 
