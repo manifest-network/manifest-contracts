@@ -6,7 +6,7 @@ pub enum ContractError {
     #[error("{0}")]
     StdError(#[from] StdError),
     #[error("unauthorized: {0}")]
-    Unauthorized(#[from] AuthError),
+    AdminError(#[from] AdminError),
     #[error("invalid rate: {0}")]
     RateError(#[from] RateError),
     #[error("invalid denom: {0}")]
@@ -17,6 +17,10 @@ pub enum ContractError {
     ConvertError(#[from] ConvertError),
     #[error("configuration error: {0}")]
     ConfigError(#[from] ConfigError),
+    #[error("migration error: {0}")]
+    MigrateError(#[from] MigrateError),
+    #[error("contract is paused")]
+    Paused,
 }
 
 #[derive(Error, Debug)]
@@ -39,6 +43,8 @@ pub enum AmountError {
     AmountExceedsMax,
     #[error("failed to parse amount")]
     InvalidAmountParsing,
+    #[error("non-payable function called with funds")]
+    NonPayable,
 }
 
 #[derive(Error, Debug)]
@@ -62,13 +68,21 @@ pub enum DenomError {
 }
 
 #[derive(Error, Debug)]
-pub enum AuthError {
+pub enum AdminError {
     #[error("only admin can perform this action")]
     NotAdmin,
+    #[error("cannot renounce admin role")]
+    CannotRenounce,
 }
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
     #[error("source and target denom cannot be the same")]
     SameDenom,
+}
+
+#[derive(Error, Debug)]
+pub enum MigrateError {
+    #[error("invalid contract name")]
+    InvalidContractName,
 }

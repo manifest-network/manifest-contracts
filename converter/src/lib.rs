@@ -1,6 +1,8 @@
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg};
-use cosmwasm_std::{entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg};
+use cosmwasm_std::{
+    entry_point, Binary, Deps, DepsMut, Env, MessageInfo, MigrateInfo, Response, StdResult,
+};
 
 mod consts;
 mod contract;
@@ -33,4 +35,14 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     contract::execute(deps, env, info, msg)
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(
+    deps: DepsMut,
+    env: Env,
+    msg: MigrateMsg,
+    info: MigrateInfo,
+) -> Result<Response, ContractError> {
+    contract::migrate(deps, env, msg, info)
 }
