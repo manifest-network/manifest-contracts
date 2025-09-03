@@ -94,17 +94,6 @@ pub fn migrate(
         .add_attribute("to_version", CONTRACT_VERSION))
 }
 
-mod helper {
-    pub(crate) fn to_manifest_coin(
-        c: &cosmwasm_std::Coin,
-    ) -> manifest_std::cosmos::base::v1beta1::Coin {
-        manifest_std::cosmos::base::v1beta1::Coin {
-            denom: c.denom.clone(),
-            amount: c.amount.to_string(),
-        }
-    }
-}
-
 mod query {
     use super::*;
 
@@ -253,7 +242,10 @@ mod exec {
         // Prepare to burn the tokens from the POA's held balance
         let burn = MsgBurnHeldBalance {
             authority: config.poa_admin.to_string(),
-            burn_coins: vec![helper::to_manifest_coin(&coin)],
+            burn_coins: vec![manifest_std::cosmos::base::v1beta1::Coin {
+                denom: config.source_denom.to_string(),
+                amount: coin.amount.to_string(),
+            }],
         };
         let any_burn = Any {
             type_url: MsgBurnHeldBalance::TYPE_URL.to_string(),
