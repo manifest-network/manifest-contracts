@@ -17,6 +17,10 @@ pub enum ContractError {
     ConvertError(#[from] ConvertError),
     #[error("configuration error: {0}")]
     ConfigError(#[from] ConfigError),
+    #[error("migration error: {0}")]
+    MigrateError(#[from] MigrateError),
+    #[error("contract is paused")]
+    Paused,
 }
 
 #[derive(Error, Debug)]
@@ -39,6 +43,8 @@ pub enum AmountError {
     AmountExceedsMax,
     #[error("failed to parse amount")]
     InvalidAmountParsing,
+    #[error("non-payable function called with funds")]
+    NonPayable,
 }
 
 #[derive(Error, Debug)]
@@ -71,4 +77,10 @@ pub enum AuthError {
 pub enum ConfigError {
     #[error("source and target denom cannot be the same")]
     SameDenom,
+}
+
+#[derive(Error, Debug)]
+pub enum MigrateError {
+    #[error("invalid contract name")]
+    InvalidContractName,
 }
