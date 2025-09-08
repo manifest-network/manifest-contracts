@@ -71,9 +71,6 @@ fn is_native(s: &str) -> bool {
 #[inline]
 fn is_ibc(s: &str) -> bool {
     const PREF: &str = "ibc/";
-    if !s.starts_with(PREF) {
-        return false;
-    }
     let hash = &s[PREF.len()..];
     if hash.len() != 64 {
         return false;
@@ -85,9 +82,6 @@ fn is_ibc(s: &str) -> bool {
 #[inline]
 fn is_factory(s: &str) -> bool {
     const PREF: &str = "factory/";
-    if !s.starts_with(PREF) {
-        return false;
-    }
     let rest = &s[PREF.len()..];
     let mut it = rest.split('/');
     let Some(creator) = it.next() else {
