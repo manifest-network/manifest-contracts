@@ -73,7 +73,7 @@ jobs:
       - name: Install wasm-opt
         run: cargo install wasm-opt --locked
       - name: WASM release build
-        run: cargo wasm --locked
+        run: RUSTFLAGS="-C link-arg=-s" cargo wasm --locked
       - name: Optimize WASM artifacts
         run: |
           mkdir artifacts
