@@ -80,7 +80,7 @@ jobs:
         run: |
           mkdir artifacts
           for f in target/wasm32-unknown-unknown/release/*.wasm; do
-              wasm-opt -Oz "$f" -o "artifacts/$(basename "$f")"
+              wasm-opt -Os "$f" -o "artifacts/$(basename "$f")"
           done
       - name: Artifact (all targets)
         if: success()
