@@ -30,16 +30,14 @@ fn create_msg_update_admin(new_admin: Option<&str>) -> impl serde::Serialize + s
 )]
 fn update_admin(
     setup_with_funds: (AppAccepting, u64),
-    default_instantiate: impl serde::Serialize,
-    default_sender: &str,
     #[case] exec_sender: &str,
     #[case] exec_msg: impl serde::Serialize + std::fmt::Debug,
     #[case] expect: Expect<'_>,
 ) {
     prepare_and_execute(
         setup_with_funds,
-        default_sender,
-        &default_instantiate,
+        default_sender(),
+        &default_instantiate(),
         &[],
         exec_sender,
         &exec_msg,

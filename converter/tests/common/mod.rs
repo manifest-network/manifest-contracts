@@ -1,3 +1,5 @@
+#![allow(dead_code)] // Allow dead code since not all helpers are used in every test file
+
 use const_format::str_splice_out;
 use converter::{execute, instantiate, migrate, query};
 use cosmwasm_std::testing::{MockApi, MockStorage};
@@ -317,6 +319,12 @@ pub fn modify_config(field: Field, value: impl serde::Serialize) -> Value {
     let mut default_config = default_config();
     default_config[field.as_ref()] = json!(value);
     default_config
+}
+
+pub fn modify_instantiate(field: Field, value: impl serde::Serialize) -> Value {
+    let mut default_instantiate = default_instantiate();
+    default_instantiate[field.as_ref()] = json!(value);
+    default_instantiate
 }
 
 pub fn create_msg_update_config_from_config(config: &impl Serialize) -> Value {

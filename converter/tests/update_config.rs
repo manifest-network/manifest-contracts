@@ -57,16 +57,14 @@ mod common;
 #[case::invalid_paused_unicode(DEFAULT_POA_ADMIN, create_msg_update_config(Field::Paused, Some("😀")), Expect::ErrContains(INVALID_TYPE_STRING))]
 fn update_config(
     setup_with_funds: (AppAccepting, u64),
-    default_instantiate: serde_json::Value,
-    default_sender: &str,
     #[case] exec_sender: &str,
     #[case] exec_msg: serde_json::Value,
     #[case] expect: Expect<'_>,
 ) {
     prepare_and_execute(
         setup_with_funds,
-        default_sender,
-        &default_instantiate,
+        default_sender(),
+        &default_instantiate(),
         &[],
         exec_sender,
         &exec_msg,

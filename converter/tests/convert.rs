@@ -12,19 +12,16 @@ mod common;
 #[case::multi_funds(&[default_convert_amount(), coin(500, DUMMY_DENOM)], Expect::ErrContains(INVALID_FUNDS))]
 fn execute_convert_invalid_funds(
     setup_with_funds: (AppAccepting, u64),
-    default_instantiate: impl serde::Serialize,
-    default_sender: &str,
-    default_convert: impl serde::Serialize + std::fmt::Debug,
     #[case] funds: &[Coin],
     #[case] expect: Expect<'_>,
 ) {
     prepare_and_execute(
         setup_with_funds,
-        default_sender,
-        &default_instantiate,
+        default_sender(),
+        &default_instantiate(),
         &[],
-        default_sender,
-        &default_convert,
+        default_sender(),
+        &default_convert(),
         funds,
         expect,
     );
@@ -35,20 +32,17 @@ fn execute_convert_invalid_funds(
 #[case::empty_sender("", Expect::ErrContains(CANNOT_SUB))]
 fn execute_convert_invalid_sender(
     setup_with_funds: (AppAccepting, u64),
-    default_instantiate: impl serde::Serialize,
-    default_convert: impl serde::Serialize + std::fmt::Debug,
-    default_convert_amount: Coin,
     #[case] sender: &str,
     #[case] expect: Expect<'_>,
 ) {
     prepare_and_execute(
         setup_with_funds,
         default_sender(),
-        &default_instantiate,
+        &default_instantiate(),
         &[],
         sender,
-        &default_convert,
-        &[default_convert_amount],
+        &default_convert(),
+        &[default_convert_amount()],
         expect,
     );
 }
@@ -58,20 +52,17 @@ fn execute_convert_invalid_sender(
 #[case::empty_message(serde_json::json!({}), Expect::ErrContains(EXPECTED_VALUE))]
 fn execute_convert_invalid_message(
     setup_with_funds: (AppAccepting, u64),
-    default_instantiate: impl serde::Serialize,
-    default_sender: &str,
-    default_convert_amount: Coin,
     #[case] exec_msg: impl serde::Serialize + std::fmt::Debug,
     #[case] expect: Expect<'_>,
 ) {
     prepare_and_execute(
         setup_with_funds,
-        default_sender,
-        &default_instantiate,
+        default_sender(),
+        &default_instantiate(),
         &[],
-        default_sender,
+        default_sender(),
         &exec_msg,
-        &[default_convert_amount],
+        &[default_convert_amount()],
         expect,
     );
 }
@@ -79,20 +70,17 @@ fn execute_convert_invalid_message(
 #[rstest]
 fn execute_convert_when_paused(
     setup_with_funds: (AppAccepting, u64),
-    default_sender: &str,
-    default_convert: impl serde::Serialize + std::fmt::Debug,
-    default_convert_amount: Coin,
 ) {
     let mut instantiate_msg = default_instantiate();
     instantiate_msg["paused"] = serde_json::json!(true);
     prepare_and_execute(
         setup_with_funds,
-        default_sender,
+        default_sender(),
         &instantiate_msg,
         &[],
-        default_sender,
-        &default_convert,
-        &[default_convert_amount],
+        default_sender(),
+        &default_convert(),
+        &[default_convert_amount()],
         Expect::ErrContains(CONTRACT_PAUSED),
     );
 }
@@ -101,18 +89,15 @@ fn execute_convert_when_paused(
 #[case::ten(coin(10, DEFAULT_SOURCE_DENOM))]
 fn execute_convert_ok(
     setup_with_funds: (AppAccepting, u64),
-    default_instantiate: impl serde::Serialize,
-    default_sender: &str,
-    default_convert: impl serde::Serialize + std::fmt::Debug,
     #[case] funds: Coin,
 ) {
     prepare_and_execute(
         setup_with_funds,
-        default_sender,
-        &default_instantiate,
+        default_sender(),
+        &default_instantiate(),
         &[],
-        default_sender,
-        &default_convert,
+        default_sender(),
+        &default_convert(),
         &[funds],
         Expect::Ok,
     );

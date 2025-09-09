@@ -13,17 +13,15 @@ mod common;
 #[case::paused(modify_config(Field::Paused, true))]
 fn query_config(
     setup_with_funds: (AppAccepting, u64),
-    default_instantiate: impl serde::Serialize,
-    default_admin: &str,
     #[case] config: impl serde::Serialize,
 ) {
     let exec_msg = create_msg_update_config_from_config(&config);
     let (app, contract_addr, _code_id) = prepare_and_execute(
         setup_with_funds,
-        default_admin,
-        &default_instantiate,
+        default_admin(),
+        &default_instantiate(),
         &[],
-        default_admin,
+        default_admin(),
         &exec_msg,
         &[],
         Expect::Ok,
@@ -41,17 +39,15 @@ fn query_config(
 #[case::default_admin(DEFAULT_POA_ADMIN)]
 fn query_admin(
     setup_with_funds: (AppAccepting, u64),
-    default_instantiate: impl serde::Serialize,
-    default_admin: &str,
     #[case] admin: &str,
 ) {
     let exec_msg = create_msg_update_admin(Some(admin));
     let (app, contract_addr, _code_id) = prepare_and_execute(
         setup_with_funds,
-        default_admin,
-        &default_instantiate,
+        default_admin(),
+        &default_instantiate(),
         &[],
-        default_admin,
+        default_admin(),
         &exec_msg,
         &[],
         Expect::Ok,
@@ -62,8 +58,5 @@ fn query_admin(
         .wrap()
         .query_wasm_smart(contract_addr, &query_msg)
         .unwrap();
-    assert_eq!(
-        res,
-        serde_json::json!({"admin": default_admin})
-    );
+    assert_eq!(res, serde_json::json!({"admin": default_admin()}));
 }

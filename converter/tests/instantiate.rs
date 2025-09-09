@@ -1,5 +1,4 @@
 use crate::common::*;
-use cosmwasm_std::coin;
 use rstest::*;
 
 mod common;
@@ -91,23 +90,18 @@ fn instantiate_field_variations(
     #[case] expect: Expect<'static>,
 ) {
     let (app, code_id) = setup;
-    let mut msg = default_instantiate();
-    msg[field.as_ref()] = serde_json::json!(val);
-    run_instantiate(app, code_id, default_sender(), &msg, no_funds(), expect);
+    run_instantiate(app, code_id, default_sender(), &modify_instantiate(field, val), no_funds(), expect);
 }
 
 #[rstest]
-fn instantiate_with_funds(
-    setup_with_funds: (AppAccepting, u64),
-    default_instantiate: impl serde::Serialize,
-) {
+fn instantiate_with_funds(setup_with_funds: (AppAccepting, u64)) {
     let (app, code_id) = setup_with_funds;
     run_instantiate(
         app,
         code_id,
         default_sender(),
-        &default_instantiate,
-        &[coin(1, DEFAULT_SOURCE_DENOM)],
+        &default_instantiate(),
+        &default_initial_funds(),
         Expect::ErrContains(NON_PAYABLE),
     );
 }
