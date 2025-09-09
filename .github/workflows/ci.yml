@@ -82,6 +82,10 @@ jobs:
           for f in target/wasm32-unknown-unknown/release/*.wasm; do
               wasm-opt -Os "$f" -o "artifacts/$(basename "$f")"
           done
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum -- *.wasm | tee checksums.txt
       - name: Artifact (all targets)
         if: success()
         uses: actions/upload-artifact@v4
