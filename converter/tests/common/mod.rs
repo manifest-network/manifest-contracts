@@ -229,7 +229,7 @@ pub fn run_instantiate(
             assert!(!addr.as_str().is_empty());
         }
         Expect::ErrContains(s) => {
-            let err = res.err().expect("expected Err");
+            let err = res.err().unwrap();
             let text = format!("{err:#}");
             assert!(
                 text.contains(s),
@@ -260,7 +260,7 @@ fn run_execute(
             let _res = res.expect("expected Ok");
         }
         Expect::ErrContains(s) => {
-            let err = res.err().expect("expected Err");
+            let err = res.err().unwrap();
             let text = format!("{err:#}");
             assert!(
                 text.contains(s),
@@ -272,6 +272,7 @@ fn run_execute(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_and_execute(
     setup_with_funds: (AppAccepting, u64),
     instantiate_sender: &str,

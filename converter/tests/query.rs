@@ -11,10 +11,7 @@ mod common;
 #[case::src_denom(modify_config(Field::SourceDenom, "uatom"))]
 #[case::tgt_denom(modify_config(Field::TargetDenom, "uosmo"))]
 #[case::paused(modify_config(Field::Paused, true))]
-fn query_config(
-    setup_with_funds: (AppAccepting, u64),
-    #[case] config: impl serde::Serialize,
-) {
+fn query_config(setup_with_funds: (AppAccepting, u64), #[case] config: impl serde::Serialize) {
     let exec_msg = create_msg_update_config_from_config(&config);
     let (app, contract_addr, _code_id) = prepare_and_execute(
         setup_with_funds,
@@ -37,10 +34,7 @@ fn query_config(
 
 #[rstest]
 #[case::default_admin(DEFAULT_POA_ADMIN)]
-fn query_admin(
-    setup_with_funds: (AppAccepting, u64),
-    #[case] admin: &str,
-) {
+fn query_admin(setup_with_funds: (AppAccepting, u64), #[case] admin: &str) {
     let exec_msg = create_msg_update_admin(Some(admin));
     let (app, contract_addr, _code_id) = prepare_and_execute(
         setup_with_funds,

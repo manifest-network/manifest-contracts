@@ -68,9 +68,7 @@ fn execute_convert_invalid_message(
 }
 
 #[rstest]
-fn execute_convert_when_paused(
-    setup_with_funds: (AppAccepting, u64),
-) {
+fn execute_convert_when_paused(setup_with_funds: (AppAccepting, u64)) {
     let mut instantiate_msg = default_instantiate();
     instantiate_msg["paused"] = serde_json::json!(true);
     prepare_and_execute(
@@ -87,10 +85,7 @@ fn execute_convert_when_paused(
 
 #[rstest]
 #[case::ten(coin(10, DEFAULT_SOURCE_DENOM))]
-fn execute_convert_ok(
-    setup_with_funds: (AppAccepting, u64),
-    #[case] funds: Coin,
-) {
+fn execute_convert_ok(setup_with_funds: (AppAccepting, u64), #[case] funds: Coin) {
     prepare_and_execute(
         setup_with_funds,
         default_sender(),
