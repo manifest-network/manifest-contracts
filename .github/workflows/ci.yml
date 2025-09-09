@@ -49,12 +49,10 @@ jobs:
           protoc --version
       - name: Cargo fetch
         run: cargo fetch --locked
-      - name: Build (all targets)
-        run: cargo build --workspace --all-targets --locked
-      - name: Tests
-        run: cargo test --workspace --all-features --all-targets -- --nocapture
       - name: WASM release build
-        run: cargo build --release --target wasm32-unknown-unknown --locked
+        run: cargo wasm --locked
+      - name: Tests
+        run: cargo test -- --nocapture
 
   artifacts:
     name: Build Artifacts
@@ -75,7 +73,7 @@ jobs:
       - name: Install wasm-opt
         run: cargo install wasm-opt --locked
       - name: WASM release build
-        run: cargo build --release --workspace --all-targets --locked
+        run: cargo wasm --locked
       - name: Optimize WASM artifacts
         run: |
           mkdir artifacts
