@@ -277,7 +277,6 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
- "strum",
  "strum_macros",
  "thiserror 2.0.16",
 ]
@@ -1014,9 +1013,9 @@ checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "manifest-std"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3963b9fecdc56e03ec20f8286d724a25faf7868f1ecd64f7ce0c2a7689eaaa02"
+checksum = "8ef175fdd638088f0b871fdc72869360eca1f6cf0a76f862cce7139d70887f1d"
 dependencies = [
  "heck",
  "prost",
@@ -1604,15 +1603,6 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-
-[[package]]
-name = "strum"
-version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
-dependencies = [
- "strum_macros",
-]
 
 [[package]]
 name = "strum_macros"
