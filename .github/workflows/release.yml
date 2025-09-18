@@ -1,0 +1,63 @@
+name: Release Wasm
+
+on:
+  push:
+    tags:
+      - v*
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g., v1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: 1.81.0
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Rust (stable) + wasm target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-unknown-unknown
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
+      - name: Install wasm-opt
+        run: cargo install wasm-opt --locked
+      - name: WASM release build
+        run: RUSTFLAGS="-C link-arg=-s" cargo wasm --locked
+      - name: Optimize WASM artifacts
+        run: |
+          mkdir artifacts
+          for f in target/wasm32-unknown-unknown/release/*.wasm; do
+              wasm-opt -Os "$f" -o "artifacts/$(basename "$f")"
+          done
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum -- *.wasm | tee checksums.txt
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: |
+           artifacts/*.wasm
+           artifacts/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
