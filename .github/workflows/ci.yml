@@ -120,6 +120,8 @@ jobs:
     needs: fmt_lint
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Set up Docker Compose
         uses: docker/setup-buildx-action@v2
       - name: Install test deps
@@ -128,8 +130,22 @@ jobs:
           sudo apt-get install -y bats jq
           bats --version
           jq --version
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-unknown-unknown
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
+      - name: Install wasm-opt
+        run: cargo install wasm-opt --locked
+      - name: Install cosmwasm-check
+        run: cargo install cosmwasm-check --locked
       - name: E2E test
         run: bats e2e/tests/converter.bats
       - name: Cleanup
         if: always()
-        run: docker-compose -f e2e/docker-compose.yml down -v
+        run: docker compose -f e2e/docker-compose.yml down -v
