@@ -72,6 +72,8 @@ jobs:
             protoc --version
       - name: Install wasm-opt
         run: cargo install wasm-opt --locked
+      - name: Install cosmwasm-check
+        run: cargo install cosmwasm-check --locked
       - name: WASM release build
         run: make build-opt
       - name: Generate checksums
