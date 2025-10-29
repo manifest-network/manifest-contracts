@@ -25,7 +25,9 @@ pub enum QueryMsg {
 }
 
 #[cw_serde]
-pub enum MigrateMsg {}
+pub enum MigrateMsg {
+    Migrate {},
+}
 
 // TODO: Write a macro to generate this struct from the Config struct
 #[cw_serde]

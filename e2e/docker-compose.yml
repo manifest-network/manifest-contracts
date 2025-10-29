@@ -1,0 +1,23 @@
+services:
+  manifest-ledger:
+    image: ghcr.io/manifest-network/manifest-ledger:1.0.11
+    volumes:
+        - manifest-ledger-bin:/usr/bin
+        - manifest-ledger-data:/persistent
+        - ./scripts/init_manifest_ledger.sh:/usr/local/bin/init_manifest_ledger.sh:ro
+        - ../:/workspace:ro
+    ports:
+      - "9090:9090"
+      - "26657:26657"
+    entrypoint: ["/bin/bash", "-c"]
+    env_file: ./.env
+    command: /usr/local/bin/init_manifest_ledger.sh
+    healthcheck:
+      test: manifestd status | grep '"earliest_block_height":"1"'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  manifest-ledger-bin:
+  manifest-ledger-data:
