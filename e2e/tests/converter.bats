@@ -2,267 +2,74 @@
 
 load '../test_helper/bats-support/load'
 load '../test_helper/bats-assert/load'
+load '../test_helper/common.sh'
 
 setup() {
-    export CHAIN_ID="test-1"
-    export RPC="http://localhost:26657"
-    export CONTAINER_NAME="e2e-manifest-ledger-1"
-    export WASM_FILE="artifacts/converter.wasm"
-    export USER_ADDR="manifest1hj5fveer5cjtn4wd6wstzugjfdxzl0xp8ws9ct"
-    export USER2_ADDR="manifest1efd63aw40lxf3n4mhf7dzhjkr453axurm6rp3z"
-    export POA_ADMIN_ADDR=$USER_ADDR
-    export RATE="2"
-    export SOURCE_DENOM="umfx"
-    export TARGET_DENOM="factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr"
-    export GAS_PRICES="0.0011umfx"
+  export CHAIN_ID="test-1"
+  export RPC="http://localhost:26657"
+  export CONTAINER_NAME="e2e-manifest-ledger-1"
+  export WASM_FILE="artifacts/converter.wasm"
+  export USER_ADDR="manifest1hj5fveer5cjtn4wd6wstzugjfdxzl0xp8ws9ct"
+  export USER2_ADDR="manifest1efd63aw40lxf3n4mhf7dzhjkr453axurm6rp3z"
+  export POA_ADMIN_ADDR=$USER_ADDR
+  export RATE="2"
+  export SOURCE_DENOM="umfx"
+  export TARGET_DENOM="factory/manifest1afk9zr2hn2jsac63h4hm60vl9z3e5u69gndzf7c99cqge3vzwjzsfmy9qj/upwr"
+  export GAS_PRICES="0.0011umfx"
 
-    # Build optimized contract
-    run make build-opt
-    assert_success
-    assert [ -f "$WASM_FILE" ]
+  run make build-opt
+  assert_success
+  assert [ -f "$WASM_FILE" ]
 
-    # Start chain
-    run make e2e-chain-up
-    assert_success
-
-    # Wait for chain to be ready
-    sleep 5
+  run make e2e-chain-up
+  assert_success
+  sleep 5
 }
 
 teardown() {
-    if [ "$BATS_TEST_COMPLETED" = "1" ]; then
-        make e2e-chain-down
-    fi
+  [ "$BATS_TEST_COMPLETED" = "1" ] && make e2e-chain-down
 }
 
-@test "convert" {
-    #####
-    ##### STORE CONTRACT
-    #####
-    echo "# --> Storing contract on-chain" >&3
-    run docker exec "$CONTAINER_NAME" manifestd tx wasm store \
-        "/workspace/$WASM_FILE" \
-        --from "$USER_ADDR" \
-        --home "/persistent/.manifest" \
-        --keyring-backend "test" \
-        --gas auto \
-        --gas-adjustment 1.4 \
-        --gas-prices "$GAS_PRICES" \
-        --chain-id "$CHAIN_ID" \
-        --node "$RPC" \
-        --yes \
-        --output json
+@test "converter end-to-end" {
+  store_contract
 
-    assert_success
+  INIT_MSG=$(jq -n --arg admin "$USER_ADDR" --arg poa "$POA_ADMIN_ADDR" \
+    --arg rate "$RATE" --arg src "$SOURCE_DENOM" --arg tgt "$TARGET_DENOM" \
+    '{"admin":$admin,"poa_admin":$poa,"rate":$rate,"source_denom":$src,"target_denom":$tgt,"paused":false}')
+  instantiate_contract "$INIT_MSG"
 
-    JSON_OUTPUT=$(echo "$output" | tail -n +3)
-    TX_HASH=$(echo "$JSON_OUTPUT" | jq -r '.txhash')
-    assert [ -n "$TX_HASH" ]
-    ERR_CODE=$(echo "$JSON_OUTPUT" | jq -r '.code')
-    assert [ "$ERR_CODE" -eq 0 ]
+  grant_authz "/osmosis.tokenfactory.v1beta1.MsgMint"
+  grant_authz "/liftedinit.manifest.v1.MsgBurnHeldBalance"
 
-    echo "# --> Transaction submitted with hash: $TX_HASH" >&3
+  SOURCE_SUPPLY_BEFORE=$(query_json "Querying MFX total supply before conversion" bank total-supply-of "$SOURCE_DENOM" | jq -r '.amount.amount')
+  TARGET_SUPPLY_BEFORE=$(query_json "Querying PWR total supply before conversion" bank total-supply-of "$TARGET_DENOM" | jq -r '.amount.amount')
 
-    sleep 3
+  execute_contract '{"convert":{}}' "$USER2_ADDR" "1000000$SOURCE_DENOM"
 
-    # Query transaction to get code ID
-    run docker exec "$CONTAINER_NAME" manifestd query tx "$TX_HASH" \
-        --node "$RPC" \
-        --output json
+  PWR_BALANCE=$(query_json "Querying user2 PWR balance" bank balances "$USER2_ADDR" | jq -r '.balances[] | select(.denom=="'"$TARGET_DENOM"'") | .amount')
+  assert [ "$PWR_BALANCE" == "2000000" ]
 
-    assert_success
+  execute_contract '{"update_admin":{"admin":"'"$USER2_ADDR"'"}}' "$USER_ADDR"
+  execute_contract '{"update_config":{"config":{"rate":"3"}}}' "$USER2_ADDR"
 
-    CODE_ID=$(echo "$output" | tail -n +2 | jq -r '.events[] | select(.type=="store_code") | .attributes[] | select(.key=="code_id") | .value')
-    assert [ "$CODE_ID" -gt 0 ]
+  execute_contract '{"convert":{}}' "$USER2_ADDR" "1000000$SOURCE_DENOM"
+  PWR_BALANCE=$(query_json "Querying updated PWR balance" bank balances "$USER2_ADDR" | jq -r '.balances[] | select(.denom=="'"$TARGET_DENOM"'") | .amount')
+  assert [ "$PWR_BALANCE" == "5000000" ]
 
-    echo "# --> Contract uploaded successfully with code ID: $CODE_ID" >&3
+  execute_contract '{"update_config":{"config":{"paused":true}}}' "$USER2_ADDR"
+  run docker exec "$CONTAINER_NAME" manifestd tx wasm execute "$CONTRACT_ADDR" '{"convert":{}}' \
+    --from "$USER2_ADDR" --home "/persistent/.manifest" --keyring-backend "test" \
+    --amount "1000000$SOURCE_DENOM" --gas auto --gas-prices "$GAS_PRICES" \
+    --chain-id "$CHAIN_ID" --node "$RPC" --yes --output json
+  assert_failure
 
-    # Verify code exists
-    run docker exec "$CONTAINER_NAME" manifestd query wasm code-info "$CODE_ID" \
-        --node "$RPC" \
-        --output json
+  execute_contract '{"update_config":{"config":{"paused":false}}}' "$USER2_ADDR"
+  execute_contract '{"convert":{}}' "$USER2_ADDR" "1000000$SOURCE_DENOM"
+  PWR_BALANCE=$(query_json "Querying PWR balance after unpause" bank balances "$USER2_ADDR" | jq -r '.balances[] | select(.denom=="'"$TARGET_DENOM"'") | .amount')
+  assert [ "$PWR_BALANCE" == "8000000" ]
 
-    assert_success
-
-    CREATOR=$(echo "$output" | tail -n +2 | jq -r '.code_info.creator')
-    assert [ -n "$CREATOR" ]
-
-    #####
-    ##### INSTANTIATE CONTRACT
-    #####
-    INIT_MSG='{"admin":"'$USER_ADDR'","poa_admin":"'$POA_ADMIN_ADDR'","rate":"'$RATE'","source_denom":"'$SOURCE_DENOM'","target_denom":"'$TARGET_DENOM'","paused":false}'
-
-    echo "# --> Instantiating contract" >&3
-    run docker exec "$CONTAINER_NAME" manifestd tx wasm instantiate "$CODE_ID" \
-        "$INIT_MSG" \
-        --from "$USER_ADDR" \
-        --home "/persistent/.manifest" \
-        --keyring-backend "test" \
-        --label "converter-test" \
-        --gas auto \
-        --gas-adjustment 1.4 \
-        --gas-prices "$GAS_PRICES" \
-        --chain-id "$CHAIN_ID" \
-        --node "$RPC" \
-        --yes \
-        --admin "$USER_ADDR" \
-        --output json
-
-    assert_success
-
-    JSON_OUTPUT=$(echo "$output" | tail -n +3)
-    TX_HASH=$(echo "$JSON_OUTPUT" | jq -r '.txhash')
-    assert [ -n "$TX_HASH" ]
-    ERR_CODE=$(echo "$JSON_OUTPUT" | jq -r '.code')
-    assert [ "$ERR_CODE" -eq 0 ]
-
-    echo "# --> Transaction submitted with hash: $TX_HASH" >&3
-
-    sleep 3
-
-    # Query transaction to get code ID
-    run docker exec "$CONTAINER_NAME" manifestd query tx "$TX_HASH" \
-      --node "$RPC" \
-      --output json
-
-    assert_success
-
-    CONTRACT_ADDR=$(echo "$output" | tail -n +2 | jq -r '.events[] | select(.type=="wasm") | .attributes[] | select(.key=="_contract_address") | .value')
-    assert [ -n "$CONTRACT_ADDR" ]
-
-    #####
-    ##### GRANT AUTHZ PWR MINTING CAPABILITIES TO CONTRACT
-    #####
-    echo "# --> Setting PWR minting permissions to contract" >&3
-    run docker exec "$CONTAINER_NAME" manifestd tx authz grant $CONTRACT_ADDR generic \
-      --msg-type "/osmosis.tokenfactory.v1beta1.MsgMint"  \
-      --from "$USER_ADDR" \
-      --home "/persistent/.manifest" \
-      --keyring-backend "test" \
-      --gas auto \
-      --gas-adjustment 1.8 \
-      --gas-prices "$GAS_PRICES" \
-      --chain-id "$CHAIN_ID" \
-      --node "$RPC" \
-      --yes \
-      --output json
-
-    assert_success
-
-    JSON_OUTPUT=$(echo "$output" | tail -n +3)
-    TX_HASH=$(echo "$JSON_OUTPUT" | jq -r '.txhash')
-    assert [ -n "$TX_HASH" ]
-    ERR_CODE=$(echo "$JSON_OUTPUT" | jq -r '.code')
-    assert [ "$ERR_CODE" -eq 0 ]
-
-    echo "# --> Transaction submitted with hash: $TX_HASH" >&3
-
-    sleep 3
-
-    # Query transaction to get code ID
-    run docker exec "$CONTAINER_NAME" manifestd query tx "$TX_HASH" \
-      --node "$RPC" \
-      --output json
-
-    assert_success
-
-    JSON_OUTPUT=$(echo "$output" | tail -n +2)
-    ERR_CODE=$(echo "$JSON_OUTPUT" | jq -r '.code')
-    assert [ "$ERR_CODE" -eq 0 ]
-
-    #####
-    ##### GRANT AUTHZ MFX BURNING CAPABILITIES TO CONTRACT
-    #####
-    echo "# --> Setting MFX burning permissions to contract" >&3
-    run docker exec "$CONTAINER_NAME" manifestd tx authz grant $CONTRACT_ADDR generic \
-      --msg-type "/liftedinit.manifest.v1.MsgBurnHeldBalance"  \
-      --from "$USER_ADDR" \
-      --home "/persistent/.manifest" \
-      --keyring-backend "test" \
-      --gas auto \
-      --gas-adjustment 1.8 \
-      --gas-prices "$GAS_PRICES" \
-      --chain-id "$CHAIN_ID" \
-      --node "$RPC" \
-      --yes \
-      --output json
-
-    assert_success
-
-    JSON_OUTPUT=$(echo "$output" | tail -n +3)
-    TX_HASH=$(echo "$JSON_OUTPUT" | jq -r '.txhash')
-    assert [ -n "$TX_HASH" ]
-    ERR_CODE=$(echo "$JSON_OUTPUT" | jq -r '.code')
-    assert [ "$ERR_CODE" -eq 0 ]
-
-    echo "# --> Transaction submitted with hash: $TX_HASH" >&3
-
-    sleep 3
-
-    # Query transaction to get code ID
-    run docker exec "$CONTAINER_NAME" manifestd query tx "$TX_HASH" \
-      --node "$RPC" \
-      --output json
-
-    assert_success
-
-    JSON_OUTPUT=$(echo "$output" | tail -n +2)
-    ERR_CODE=$(echo "$JSON_OUTPUT" | jq -r '.code')
-    assert [ "$ERR_CODE" -eq 0 ]
-
-    #####
-    ##### CONVERT MXF TO PWR
-    #####
-    CONVERT_MSG='{"convert":{}}'
-    echo "# --> Converting 1 MFX to $RATE PWR" >&3
-    run docker exec "$CONTAINER_NAME" manifestd tx wasm execute "$CONTRACT_ADDR" \
-        "$CONVERT_MSG" \
-        --from "$USER2_ADDR" \
-        --home "/persistent/.manifest" \
-        --keyring-backend "test" \
-        --amount "1000000$SOURCE_DENOM" \
-        --gas auto \
-        --gas-adjustment 1.4 \
-        --gas-prices "$GAS_PRICES" \
-        --chain-id "$CHAIN_ID" \
-        --node "$RPC" \
-        --yes \
-        --output json
-
-    assert_success
-
-    JSON_OUTPUT=$(echo "$output" | tail -n +3)
-    TX_HASH=$(echo "$JSON_OUTPUT" | jq -r '.txhash')
-    assert [ -n "$TX_HASH" ]
-    ERR_CODE=$(echo "$JSON_OUTPUT" | jq -r '.code')
-    assert [ "$ERR_CODE" -eq 0 ]
-
-    echo "# --> Transaction submitted with hash: $TX_HASH" >&3
-
-    sleep 3
-
-    # Query transaction to get code ID
-    run docker exec "$CONTAINER_NAME" manifestd query tx "$TX_HASH" \
-      --node "$RPC" \
-      --output json
-
-    assert_success
-
-    JSON_OUTPUT=$(echo "$output" | tail -n +2)
-    ERR_CODE=$(echo "$JSON_OUTPUT" | jq -r '.code')
-    assert [ "$ERR_CODE" -eq 0 ]
-
-    run docker exec "$CONTAINER_NAME" manifestd query bank balances "$USER2_ADDR" \
-      --node "$RPC" \
-      --output json
-
-    assert_success
-
-    JSON_OUTPUT=$(echo "$output" | tail -n +2)
-    PWR_BALANCE=$(echo "$JSON_OUTPUT" | jq -r '.balances[] | select(.denom=="'"$TARGET_DENOM"'") | .amount')
-    assert [ "$PWR_BALANCE" -eq 2000000 ]
-
-    echo "# --> Conversion successful, received $RATE PWR" >&3
-
-    # TODO: Change config, Update Admin
+  run_tx "Migrating contract" wasm migrate "$CONTRACT_ADDR" "$CODE_ID" '{"migrate":{}}' --from "$USER_ADDR"
+  NOTE=$(docker exec "$CONTAINER_NAME" manifestd query tx "$TX_HASH" --node "$RPC" --output json | \
+    jq -r '.events[] | select(.type=="wasm") | .attributes[] | select(.key=="note") | .value')
+  assert [ "$NOTE" == "already at latest version" ]
 }
