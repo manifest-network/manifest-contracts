@@ -73,13 +73,7 @@ jobs:
       - name: Install wasm-opt
         run: cargo install wasm-opt --locked
       - name: WASM release build
-        run: RUSTFLAGS="-C link-arg=-s" cargo wasm --locked
-      - name: Optimize WASM artifacts
-        run: |
-          mkdir artifacts
-          for f in target/wasm32-unknown-unknown/release/*.wasm; do
-              wasm-opt -Os "$f" -o "artifacts/$(basename "$f")"
-          done
+        run: make build-opt
       - name: Generate checksums
         run: |
           cd artifacts
